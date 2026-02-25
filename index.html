@@ -5,24 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的照片墙</title>
     <style>
-        /* 基础重置，确保全屏无滚动条 */
+        /* 基础重置 */
         body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #000; /* 背景色，照片加载前或未铺满时显示 */
+            background-color: #000;
+            font-family: sans-serif;
         }
 
-        /* 照片容器 */
-        #photo-container {
+        /* 图片容器 */
+        #wrapper {
             width: 100%;
             height: 100%;
-            background-size: cover;      /* 关键：覆盖全屏 */
-            background-position: center; /* 关键：居中显示 */
-            background-repeat: no-repeat;
-            transition: opacity 0.5s ease-in-out; /* 淡入淡出效果 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: grab; /* 鼠标样式：抓取 */
+        }
+
+        #wrapper:active {
+            cursor: grabbing; /* 拖拽时的鼠标样式 */
+        }
+
+        /* 图片本身 */
+        #photo {
+            max-width: 100%;
+            max-height: 100%;
+            /* 默认保持全屏覆盖，类似之前的 background-size: cover */
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            user-select: none; /* 禁止选中图片 */
+            -webkit-user-drag: none;
+            transition: opacity 0.3s ease;
         }
 
         /* 隐藏的热区按钮 (右下角) */
@@ -30,59 +48,147 @@
             position: fixed;
             right: 0;
             bottom: 0;
-            width: 150px;  /* 按钮宽度，区域越大越容易点 */
-            height: 150px; /* 按钮高度 */
+            width: 150px;
+            height: 150px;
             cursor: pointer;
-            z-index: 10;
-            /* 如果你想让按钮可见，把下面这行删掉 */
-            opacity: 0; 
-            
-            /* 以下是为了让你知道在哪，实际使用时可删除 */
-            /* border: 1px solid rgba(255,255,255,0.2); */
+            z-index: 100;
+            opacity: 0; /* 完全透明 */
+        }
+
+        /* 简单的提示文字 (可选，默认隐藏，鼠标移到右下角才显示) */
+        #hint {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            color: rgba(255,255,255,0.3);
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 99;
+            transition: opacity 0.3s;
         }
     </style>
 </head>
 <body>
 
-    <div id="photo-container"></div>
-    <!-- 点击这个区域切换下一张 -->
+    <div id="wrapper">
+        <img id="photo" src="" alt="Photo">
+    </div>
+    
     <div id="next-btn" title="点击切换"></div>
+    <div id="hint">滚轮缩放 / 拖拽移动 / 双击重置</div>
 
     <script>
         // ==========================================
         // 配置区域：在这里替换为你的图片链接
         // ==========================================
         const images = [
-            // 你可以把图片上传到 Gitee 仓库，然后引用相对路径，或者使用图床链接
-            // 示例：
+            // 示例图片，请替换为你自己的
             "./1.jpg",
             "./2.jpg",
             "./3.jpg",
-            "./4.jpg"
+            "./4.jpg",
+            "./5.jpg",
+            "./6.jpg",
+            "./7.jpg",
+            "./8.jpg"
         ];
 
+        // ==========================================
+        // 功能逻辑区
+        // ==========================================
         let currentIndex = 0;
-        const container = document.getElementById('photo-container');
+        const img = document.getElementById('photo');
+        const wrapper = document.getElementById('wrapper');
         const btn = document.getElementById('next-btn');
 
-        // 初始化加载第一张图
+        // 缩放和平移变量
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+        let startX, startY;
+        let isDragging = false;
+
+        // 初始化图片
         function loadImage(index) {
-            // 简单的淡入淡出效果
-            container.style.opacity = 0;
-            
+            img.style.opacity = 0;
             setTimeout(() => {
-                container.style.backgroundImage = `url('${images[index]}')`;
-                container.style.opacity = 1;
-            }, 300);
+                img.src = images[index];
+                resetTransform(); // 切换图片时重置缩放
+                img.style.opacity = 1;
+            }, 200);
         }
 
-        // 点击事件
-        btn.addEventListener('click', () => {
+        // 核心：应用变换
+        function applyTransform() {
+            img.style.transform = `scale(${scale}) translate(${translateX}px, ${translateY}px)`;
+        }
+
+        // 重置缩放和位置
+        function resetTransform() {
+            scale = 1;
+            translateX = 0;
+            translateY = 0;
+            // 恢复默认的 cover 模式样式
+            img.style.width = '100%';
+            img.style.height = '100%';
+            img.style.objectFit = 'cover';
+            applyTransform();
+        }
+
+        // --- 1. 鼠标滚轮缩放 ---
+        wrapper.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            // 当开始缩放时，把图片模式从 cover 改为 contain 或原始大小，方便看细节
+            if (scale === 1) {
+                img.style.width = 'auto';
+                img.style.height = 'auto';
+                img.style.objectFit = 'unset';
+                img.style.maxWidth = '90vw'; // 限制最大宽度，避免一开始太大
+                img.style.maxHeight = '90vh';
+            }
+
+            const zoomSpeed = 0.1;
+            const delta = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
+            const newScale = Math.min(Math.max(0.5, scale + delta), 10); // 限制缩放范围 0.5x - 10x
+            
+            scale = newScale;
+            applyTransform();
+        }, { passive: false });
+
+        // --- 2. 鼠标拖拽移动 ---
+        wrapper.addEventListener('mousedown', (e) => {
+            // 只有在放大状态下才允许拖拽，或者总是允许
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            applyTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        // --- 3. 双击重置 ---
+        wrapper.addEventListener('dblclick', () => {
+            resetTransform();
+        });
+
+        // --- 4. 右下角切换下一张 ---
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation(); // 防止触发 wrapper 的点击事件
             currentIndex = (currentIndex + 1) % images.length;
             loadImage(currentIndex);
         });
 
-        // 键盘右键也可以切换 (可选)
+        // 键盘右键切换 (可选)
         document.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowRight') {
                 currentIndex = (currentIndex + 1) % images.length;
@@ -94,5 +200,4 @@
         loadImage(currentIndex);
     </script>
 </body>
-
 </html>
