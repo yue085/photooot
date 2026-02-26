@@ -5,120 +5,119 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的照片墙</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
 
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #000;
-        }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #666; z-index: 999; }
+        .slider { width: 100%; height: 100%; position: relative; overflow: hidden; display: none; }
+        .slide-wrapper { display: flex; height: 100%; transition: transform 0.4s ease; }
+        .slide { width: 100vw; height: 100%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .slide img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; pointer-events: none; }
 
-        /* 全屏滑动容器 */
-        .slider {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            overflow: hidden;
-        }
-
-        /* 图片长条容器 */
-        .slide-wrapper {
-            display: flex;
-            height: 100%;
-            transition: transform 0.4s ease;
-        }
-
-        /* 单张图片 */
-        .slide {
-            width: 100vw;
-            height: 100%;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .slide img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain; /* 完整显示图片，不变形 */
-            user-select: none;
-        }
+        .pagination { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer; transition: all 0.3s; }
+        .dot.active { background: #fff; transform: scale(1.2); }
     </style>
 </head>
 <body>
 
-<div class="slider">
+<div id="loading">正在加载照片...</div>
+
+<div class="slider" id="slider">
     <div class="slide-wrapper" id="slideWrapper"></div>
+    <div class="pagination" id="pagination"></div>
 </div>
 
 <script>
-    // ====================== 你的图片列表 ======================
-    const images = [
-        "./1.jpg",
-        "./2.jpg",
-        "./3.jpg",
-        "./4.jpg",
-        "./5.jpg",
-        "./6.jpg",
-        "./7.jpg",
-        "./8.jpg"
-    ];
-
     const slideWrapper = document.getElementById('slideWrapper');
+    const pagination = document.getElementById('pagination');
+    const sliderEl = document.getElementById('slider');
+    const loadingEl = document.getElementById('loading');
+    
     let currentIndex = 0;
     let startX = 0;
     let moveX = 0;
+    let images = [];
 
-    // 1. 渲染所有图片
+    // 直接读取同目录下的 images.json
+    async function fetchImages() {
+        try {
+            const response = await fetch('./images.json');
+            if (!response.ok) throw new Error("未找到 images.json，请确保已上传图片并等待机器人生成列表");
+            
+            images = await response.json();
+
+            if (images.length === 0) {
+                loadingEl.innerText = "images 文件夹为空，请先上传图片！";
+                return;
+            }
+
+            init();
+        } catch (err) {
+            console.error(err);
+            loadingEl.innerText = "加载失败，请确认仓库已正确配置 Actions 并上传了图片";
+        }
+    }
+
+    function init() {
+        renderSlides();
+        renderPagination();
+        goToSlide(0);
+        
+        loadingEl.style.display = 'none';
+        sliderEl.style.display = 'block';
+        bindEvents();
+    }
+
     function renderSlides() {
         slideWrapper.innerHTML = '';
         images.forEach(src => {
             const slide = document.createElement('div');
             slide.className = 'slide';
-            slide.innerHTML = `<img src="${src}" alt="">`;
+            slide.innerHTML = `<img src="${src}" alt="photo" loading="lazy">`;
             slideWrapper.appendChild(slide);
         });
     }
 
-    // 2. 切换到第 n 张
+    function renderPagination() {
+        pagination.innerHTML = '';
+        images.forEach((_, i) => {
+            const dot = document.createElement('div');
+            dot.className = 'dot';
+            dot.onclick = () => goToSlide(i);
+            pagination.appendChild(dot);
+        });
+    }
+
     function goToSlide(index) {
         currentIndex = Math.max(0, Math.min(index, images.length - 1));
         slideWrapper.style.transform = `translateX(-${currentIndex * 100}vw)`;
+        
+        const dots = document.querySelectorAll('.dot');
+        dots.forEach((dot, i) => dot.classList.toggle('active', i === currentIndex));
     }
 
-    // 3. 触摸滑动逻辑
-    slideWrapper.addEventListener('touchstart', e => {
-        startX = e.touches[0].clientX;
-    });
+    function bindEvents() {
+        slideWrapper.addEventListener('touchstart', e => { startX = e.touches[0].clientX; });
+        slideWrapper.addEventListener('touchmove', e => { moveX = e.touches[0].clientX - startX; });
+        slideWrapper.addEventListener('touchend', () => {
+            if (moveX < -50) goToSlide(currentIndex + 1);
+            else if (moveX > 50) goToSlide(currentIndex - 1);
+            moveX = 0;
+        });
 
-    slideWrapper.addEventListener('touchmove', e => {
-        moveX = e.touches[0].clientX - startX;
-    });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'ArrowRight') goToSlide(currentIndex + 1);
+            if (e.key === 'ArrowLeft')  goToSlide(currentIndex - 1);
+        });
 
-    slideWrapper.addEventListener('touchend', () => {
-        if (moveX < -50) {
-            goToSlide(currentIndex + 1); // 左滑 → 下一张
-        } else if (moveX > 50) {
-            goToSlide(currentIndex - 1); // 右滑 → 上一张
-        }
-        moveX = 0;
-    });
+        document.addEventListener('wheel', e => {
+            if (e.deltaY > 0) goToSlide(currentIndex + 1);
+            else if (e.deltaY < 0) goToSlide(currentIndex - 1);
+        });
+    }
 
-    // 4. 键盘左右键
-    document.addEventListener('keydown', e => {
-        if (e.key === 'ArrowRight') goToSlide(currentIndex + 1);
-        if (e.key === 'ArrowLeft')  goToSlide(currentIndex - 1);
-    });
-
-    // 启动
-    renderSlides();
-    goToSlide(0);
+    fetchImages();
 </script>
 
 </body>
