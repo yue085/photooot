@@ -5,199 +5,121 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的照片墙</title>
     <style>
-        /* 基础重置 */
-        body, html {
+        * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #000;
-            font-family: sans-serif;
+            background: #000;
         }
 
-        /* 图片容器 */
-        #wrapper {
+        /* 全屏滑动容器 */
+        .slider {
             width: 100%;
             height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 图片长条容器 */
+        .slide-wrapper {
             display: flex;
-            justify-content: center;
+            height: 100%;
+            transition: transform 0.4s ease;
+        }
+
+        /* 单张图片 */
+        .slide {
+            width: 100vw;
+            height: 100%;
+            flex-shrink: 0;
+            display: flex;
             align-items: center;
-            cursor: grab; /* 鼠标样式：抓取 */
+            justify-content: center;
         }
 
-        #wrapper:active {
-            cursor: grabbing; /* 拖拽时的鼠标样式 */
-        }
-
-        /* 图片本身 */
-        #photo {
-            max-width: 100%;
-            max-height: 100%;
-            /* 默认保持全屏覆盖，类似之前的 background-size: cover */
+        .slide img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
-            user-select: none; /* 禁止选中图片 */
-            -webkit-user-drag: none;
-            transition: opacity 0.3s ease;
-        }
-
-        /* 隐藏的热区按钮 (右下角) */
-        #next-btn {
-            position: fixed;
-            right: 0;
-            bottom: 0;
-            width: 150px;
-            height: 150px;
-            cursor: pointer;
-            z-index: 100;
-            opacity: 0; /* 完全透明 */
-        }
-
-        /* 简单的提示文字 (可选，默认隐藏，鼠标移到右下角才显示) */
-        #hint {
-            position: fixed;
-            right: 20px;
-            bottom: 20px;
-            color: rgba(255,255,255,0.3);
-            font-size: 12px;
-            pointer-events: none;
-            z-index: 99;
-            transition: opacity 0.3s;
+            object-fit: contain; /* 完整显示图片，不变形 */
+            user-select: none;
         }
     </style>
 </head>
 <body>
 
-    <div id="wrapper">
-        <img id="photo" src="" alt="Photo">
-    </div>
-    
-    <div id="next-btn" title="点击切换"></div>
-    <div id="hint">滚轮缩放 / 拖拽移动 / 双击重置</div>
+<div class="slider">
+    <div class="slide-wrapper" id="slideWrapper"></div>
+</div>
 
-    <script>
-        // ==========================================
-        // 配置区域：在这里替换为你的图片链接
-        // ==========================================
-        const images = [
-            // 示例图片，请替换为你自己的
-            "./1.jpg",
-            "./2.jpg",
-            "./3.jpg",
-            "./4.jpg",
-            "./5.jpg",
-            "./6.jpg",
-            "./7.jpg",
-            "./8.jpg"
-        ];
+<script>
+    // ====================== 你的图片列表 ======================
+    const images = [
+        "./1.jpg",
+        "./2.jpg",
+        "./3.jpg",
+        "./4.jpg",
+        "./5.jpg",
+        "./6.jpg",
+        "./7.jpg",
+        "./8.jpg"
+    ];
 
-        // ==========================================
-        // 功能逻辑区
-        // ==========================================
-        let currentIndex = 0;
-        const img = document.getElementById('photo');
-        const wrapper = document.getElementById('wrapper');
-        const btn = document.getElementById('next-btn');
+    const slideWrapper = document.getElementById('slideWrapper');
+    let currentIndex = 0;
+    let startX = 0;
+    let moveX = 0;
 
-        // 缩放和平移变量
-        let scale = 1;
-        let translateX = 0;
-        let translateY = 0;
-        let startX, startY;
-        let isDragging = false;
+    // 1. 渲染所有图片
+    function renderSlides() {
+        slideWrapper.innerHTML = '';
+        images.forEach(src => {
+            const slide = document.createElement('div');
+            slide.className = 'slide';
+            slide.innerHTML = `<img src="${src}" alt="">`;
+            slideWrapper.appendChild(slide);
+        });
+    }
 
-        // 初始化图片
-        function loadImage(index) {
-            img.style.opacity = 0;
-            setTimeout(() => {
-                img.src = images[index];
-                resetTransform(); // 切换图片时重置缩放
-                img.style.opacity = 1;
-            }, 200);
+    // 2. 切换到第 n 张
+    function goToSlide(index) {
+        currentIndex = Math.max(0, Math.min(index, images.length - 1));
+        slideWrapper.style.transform = `translateX(-${currentIndex * 100}vw)`;
+    }
+
+    // 3. 触摸滑动逻辑
+    slideWrapper.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX;
+    });
+
+    slideWrapper.addEventListener('touchmove', e => {
+        moveX = e.touches[0].clientX - startX;
+    });
+
+    slideWrapper.addEventListener('touchend', () => {
+        if (moveX < -50) {
+            goToSlide(currentIndex + 1); // 左滑 → 下一张
+        } else if (moveX > 50) {
+            goToSlide(currentIndex - 1); // 右滑 → 上一张
         }
+        moveX = 0;
+    });
 
-        // 核心：应用变换
-        function applyTransform() {
-            img.style.transform = `scale(${scale}) translate(${translateX}px, ${translateY}px)`;
-        }
+    // 4. 键盘左右键
+    document.addEventListener('keydown', e => {
+        if (e.key === 'ArrowRight') goToSlide(currentIndex + 1);
+        if (e.key === 'ArrowLeft')  goToSlide(currentIndex - 1);
+    });
 
-        // 重置缩放和位置
-        function resetTransform() {
-            scale = 1;
-            translateX = 0;
-            translateY = 0;
-            // 恢复默认的 cover 模式样式
-            img.style.width = '100%';
-            img.style.height = '100%';
-            img.style.objectFit = 'cover';
-            applyTransform();
-        }
+    // 启动
+    renderSlides();
+    goToSlide(0);
+</script>
 
-        // --- 1. 鼠标滚轮缩放 ---
-        wrapper.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            
-            // 当开始缩放时，把图片模式从 cover 改为 contain 或原始大小，方便看细节
-            if (scale === 1) {
-                img.style.width = 'auto';
-                img.style.height = 'auto';
-                img.style.objectFit = 'unset';
-                img.style.maxWidth = '90vw'; // 限制最大宽度，避免一开始太大
-                img.style.maxHeight = '90vh';
-            }
-
-            const zoomSpeed = 0.1;
-            const delta = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
-            const newScale = Math.min(Math.max(0.5, scale + delta), 10); // 限制缩放范围 0.5x - 10x
-            
-            scale = newScale;
-            applyTransform();
-        }, { passive: false });
-
-        // --- 2. 鼠标拖拽移动 ---
-        wrapper.addEventListener('mousedown', (e) => {
-            // 只有在放大状态下才允许拖拽，或者总是允许
-            isDragging = true;
-            startX = e.clientX - translateX;
-            startY = e.clientY - translateY;
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            e.preventDefault();
-            translateX = e.clientX - startX;
-            translateY = e.clientY - startY;
-            applyTransform();
-        });
-
-        window.addEventListener('mouseup', () => {
-            isDragging = false;
-        });
-
-        // --- 3. 双击重置 ---
-        wrapper.addEventListener('dblclick', () => {
-            resetTransform();
-        });
-
-        // --- 4. 右下角切换下一张 ---
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation(); // 防止触发 wrapper 的点击事件
-            currentIndex = (currentIndex + 1) % images.length;
-            loadImage(currentIndex);
-        });
-
-        // 键盘右键切换 (可选)
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight') {
-                currentIndex = (currentIndex + 1) % images.length;
-                loadImage(currentIndex);
-            }
-        });
-
-        // 启动
-        loadImage(currentIndex);
-    </script>
 </body>
 </html>
